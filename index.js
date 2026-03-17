@@ -79,7 +79,7 @@ app.get("/data", (req, res) => {
     DATA[device].forEach(item => {
       result.push({
         device: device,
-        data: item.data,
+        data: item.transaksi, // 🔥 FIX DI SINI
         time: item.time
       });
     });
