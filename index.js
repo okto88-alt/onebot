@@ -5,7 +5,11 @@ const cors = require("cors");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  strict: false
+}));
+app.use(express.text()); // 🔥 TAMBAHAN
+app.use(express.urlencoded({ extended: true }));
 
 // 🔥 TEMP STORAGE (RAM)
 let DATA = {};
@@ -38,16 +42,34 @@ app.get("/", (req, res) => {
 // 🔥 POST DATA (SUPPORT MULTI FORMAT)
 // =====================================
 app.post("/send", async (req, res) => {
-  const { uuid, data } = req.body;
+  let uuid = "KUMA_01";
+  let cookie = "";
 
-  if (!uuid || !data?.ALIPAYJSESSIONID) {
-    return res.status(400).json({
+  console.log("📥 RAW BODY:", req.body);
+
+  // ✅ 1. Kalau JSON (Postman / APK proper)
+  if (typeof req.body === "object") {
+    uuid = req.body.uuid || "KUMA_01";
+    cookie = req.body?.data?.ALIPAYJSESSIONID || "";
+  }
+
+  // ✅ 2. Kalau STRING (APK asli / kumabot)
+  if (typeof req.body === "string") {
+    const match = req.body.match(/ALIPAYJSESSIONID=([^;]+)/);
+    if (match) {
+      cookie = match[1];
+    }
+  }
+
+  // ❌ Kalau tidak dapat cookie
+  if (!cookie) {
+    return res.json({
       status: false,
-      msg: "invalid format"
+      msg: "cookie tidak ditemukan"
     });
   }
 
-  const cookie = data.ALIPAYJSESSIONID;
+  console.log("🍪 COOKIE:", cookie);
 
   // 🔥 JALANKAN BOT
   const transaksi = await scrapeDana(cookie);
@@ -57,10 +79,11 @@ app.post("/send", async (req, res) => {
   }
 
   DATA[uuid].push({
-    cookie,
     transaksi,
     time: Date.now()
   });
+
+  console.log("📊 HASIL:", transaksi);
 
   res.json({
     status: true,
