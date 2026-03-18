@@ -42,53 +42,87 @@ app.get("/", (req, res) => {
 // 🔥 POST DATA (SUPPORT MULTI FORMAT)
 // =====================================
 app.post("/send", async (req, res) => {
-  let uuid = "KUMA_01";
+  let uuid = "ONE_01";
   let cookie = "";
+  let raw = "";
 
   console.log("📥 RAW BODY:", req.body);
 
-  // ✅ 1. Kalau JSON (Postman / APK proper)
+  // =========================
+  // ✅ HANDLE JSON
+  // =========================
   if (typeof req.body === "object") {
-    uuid = req.body.uuid || "KUMA_01";
-    cookie = req.body?.data?.ALIPAYJSESSIONID || "";
+    uuid = req.body.uuid || "ONE_01";
+
+    // 🔥 kalau dari APK notif
+    if (typeof req.body.data === "string") {
+      raw = req.body.data;
+    }
+
+    // 🔥 kalau dari kumabot lama
+    if (req.body?.data?.ALIPAYJSESSIONID) {
+      cookie = req.body.data.ALIPAYJSESSIONID;
+    }
   }
 
-  // ✅ 2. Kalau STRING (APK asli / kumabot)
+  // =========================
+  // ✅ HANDLE STRING BODY
+  // =========================
   if (typeof req.body === "string") {
+    raw = req.body;
+
     const match = req.body.match(/ALIPAYJSESSIONID=([^;]+)/);
     if (match) {
       cookie = match[1];
     }
   }
 
-  // ❌ Kalau tidak dapat cookie
-  if (!cookie) {
+  // =========================
+  // 🔥 MODE BARU (NOTIF)
+  // =========================
+  if (raw) {
+    if (!DATA[uuid]) DATA[uuid] = [];
+
+    DATA[uuid].push({
+      raw: raw,
+      time: Date.now()
+    });
+
+    console.log("📩 NOTIF MASUK:", raw);
+
     return res.json({
-      status: false,
-      msg: "cookie tidak ditemukan"
+      status: true,
+      msg: "notif masuk"
     });
   }
 
-  console.log("🍪 COOKIE:", cookie);
+  // =========================
+  // 🔥 MODE LAMA (COOKIE)
+  // =========================
+  if (cookie) {
+    const transaksi = await scrapeDana(cookie);
 
-  // 🔥 JALANKAN BOT
-  const transaksi = await scrapeDana(cookie);
+    if (!DATA[uuid]) DATA[uuid] = [];
 
-  if (!DATA[uuid]) {
-    DATA[uuid] = [];
+    DATA[uuid].push({
+      transaksi,
+      time: Date.now()
+    });
+
+    console.log("📊 HASIL:", transaksi);
+
+    return res.json({
+      status: true,
+      msg: "cookie + transaksi masuk"
+    });
   }
 
-  DATA[uuid].push({
-    transaksi,
-    time: Date.now()
-  });
-
-  console.log("📊 HASIL:", transaksi);
-
-  res.json({
-    status: true,
-    msg: "data + transaksi masuk",
-    total: transaksi.length
+  // =========================
+  // ❌ TIDAK ADA DATA
+  // =========================
+  return res.json({
+    status: false,
+    msg: "data tidak dikenali"
   });
 });
 
@@ -102,7 +136,7 @@ app.get("/data", (req, res) => {
     DATA[device].forEach(item => {
       result.push({
         device: device,
-        data: item.transaksi, // 🔥 FIX DI SINI
+        data: item.transaksi || item.raw
         time: item.time
       });
     });
