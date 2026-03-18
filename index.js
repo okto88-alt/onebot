@@ -42,88 +42,78 @@ app.get("/", (req, res) => {
 // 🔥 POST DATA (SUPPORT MULTI FORMAT)
 // =====================================
 app.post("/send", async (req, res) => {
-  let uuid = "ONE_01";
-  let cookie = "";
-  let raw = "";
+  try {
+    let uuid = "ONE_01";
+    let cookie = "";
+    let raw = "";
 
-  console.log("📥 RAW BODY:", req.body);
+    console.log("📥 RAW BODY:", req.body);
 
-  // =========================
-  // ✅ HANDLE JSON
-  // =========================
-  if (typeof req.body === "object") {
-    uuid = req.body.uuid || "ONE_01";
+    // =========================
+    // SAFE CHECK BODY
+    // =========================
+    if (req.body && typeof req.body === "object") {
+      uuid = req.body.uuid || "ONE_01";
 
-    // 🔥 kalau dari APK notif
-    if (typeof req.body.data === "string") {
-      raw = req.body.data;
+      if (req.body.data && typeof req.body.data === "string") {
+        raw = req.body.data;
+      }
+
+      if (req.body.data && req.body.data.ALIPAYJSESSIONID) {
+        cookie = req.body.data.ALIPAYJSESSIONID;
+      }
     }
 
-    // 🔥 kalau dari kumabot lama
-    if (req.body?.data?.ALIPAYJSESSIONID) {
-      cookie = req.body.data.ALIPAYJSESSIONID;
+    // =========================
+    // STRING BODY
+    // =========================
+    if (typeof req.body === "string") {
+      raw = req.body;
+
+      const match = req.body.match(/ALIPAYJSESSIONID=([^;]+)/);
+      if (match) {
+        cookie = match[1];
+      }
     }
-  }
 
-  // =========================
-  // ✅ HANDLE STRING BODY
-  // =========================
-  if (typeof req.body === "string") {
-    raw = req.body;
+    // =========================
+    // NOTIF MODE
+    // =========================
+    if (raw) {
+      if (!DATA[uuid]) DATA[uuid] = [];
 
-    const match = req.body.match(/ALIPAYJSESSIONID=([^;]+)/);
-    if (match) {
-      cookie = match[1];
+      DATA[uuid].push({
+        raw: raw,
+        time: Date.now()
+      });
+
+      console.log("📩 NOTIF:", raw);
+
+      return res.json({ status: true });
     }
+
+    // =========================
+    // COOKIE MODE
+    // =========================
+    if (cookie) {
+      const transaksi = await scrapeDana(cookie);
+
+      if (!DATA[uuid]) DATA[uuid] = [];
+
+      DATA[uuid].push({
+        transaksi: transaksi,
+        time: Date.now()
+      });
+
+      return res.json({ status: true });
+    }
+
+    return res.json({ status: false });
+
+  } catch (err) {
+    console.log("🔥 ERROR SEND:", err);
+    res.json({ status: false });
   }
-
-  // =========================
-  // 🔥 MODE BARU (NOTIF)
-  // =========================
-  if (raw) {
-    if (!DATA[uuid]) DATA[uuid] = [];
-
-    DATA[uuid].push({
-      raw: raw,
-      time: Date.now()
-    });
-
-    console.log("📩 NOTIF MASUK:", raw);
-
-    return res.json({
-      status: true,
-      msg: "notif masuk"
-    });
-  }
-
-  // =========================
-  // 🔥 MODE LAMA (COOKIE)
-  // =========================
-  if (cookie) {
-    const transaksi = await scrapeDana(cookie);
-
-    if (!DATA[uuid]) DATA[uuid] = [];
-
-    DATA[uuid].push({
-      transaksi,
-      time: Date.now()
-    });
-
-    console.log("📊 HASIL:", transaksi);
-
-    return res.json({
-      status: true,
-      msg: "cookie + transaksi masuk"
-    });
-  }
-
-  // =========================
-  // ❌ TIDAK ADA DATA
-  // =========================
-  return res.json({
-    status: false,
-    msg: "data tidak dikenali"
-  });
 });
 
 // =====================================
@@ -136,7 +126,7 @@ app.get("/data", (req, res) => {
     DATA[device].forEach(item => {
       result.push({
         device: device,
-        data: item.transaksi || item.raw
+        data: item.transaksi || item.raw,
         time: item.time
       });
     });
